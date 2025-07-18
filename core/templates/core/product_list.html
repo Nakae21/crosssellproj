@@ -1,0 +1,196 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block content %}
+<nav class="navbar navbar-light bg-white shadow-sm p-3">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="#" style="color: #0d6efd;">G3 Stores</a>
+    <form method="GET" class="d-flex w-50">
+      <input class="form-control me-2 border-primary" type="search" placeholder="Search products" name="search" style="border-width: 2px;">
+      <button class="btn btn-outline-primary" type="submit">Search</button>
+    </form>
+    <div>
+      <a href="{% url 'core:account' %}" class="me-3 text-dark">Account</a>
+      <a href="{% url 'core:cart' %}" class="text-dark">
+        Cart 🛒 <span id="cart-count" class="badge bg-danger" style="display:none;">0</span>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid mt-3">
+  <div class="row">
+    <!-- Sidebar -->
+    <div class="col-md-2 sidebar">
+      <h6 class="text-muted mb-3">📂 Categories</h6>
+      <a href="?">All Products</a>
+      {% for cat in categories %}
+        <a href="?category={{ cat }}">{{ cat }}</a>
+      {% endfor %}
+    </div>
+
+    <!-- Main content -->
+    <div class="col-md-10">
+      <!-- Flash Sale -->
+      <div class="flash-sale mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">🔥 Flash Sales</h5>
+          <small>Time Left: <strong>12h : 16m : 08s</strong></small>
+        </div>
+        <div class="row flex-nowrap overflow-auto">
+          {% for product in products|slice:":6" %}
+            <div class="col-md-2 col-6">
+              <div class="product-card">
+                <img src="{{ product.image.url|default:'/media/products/default_product.png' }}" class="product-img mb-2" alt="{{ product.name }}">
+                <a href="{% url 'core:product_detail' product.pk %}" class="product-title">{{ product.name }}</a>
+                <p class="mb-0 text-white">₵{{ product.price }}</p>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- All Products Grid -->
+      <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-4">
+        {% for product in products %}
+          <div class="col">
+            <div class="product-card">
+              <img src="{{ product.image.url|default:'/media/products/default_product.png' }}" alt="{{ product.name }}" class="product-img mb-2">
+              <a href="{% url 'core:product_detail' product.pk %}" class="product-title">{{ product.name }}</a>
+              <p class="mb-1 text-muted">₵{{ product.price }}</p>
+              <small class="text-secondary">Category: {{ product.category }}</small>
+              <form method="POST" action="{% url 'core:add_to_cart' product.pk %}" class="add-to-cart-form mt-2">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary w-100">Add to Cart 🛒</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      {% if not products %}
+        <div class="alert alert-warning mt-4 text-center">No products available.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- 🧠 Cross-sell Modal -->
+<div class="modal fade" id="crossSellModal" tabindex="-1" aria-labelledby="crossSellModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Recommended Products</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{% url 'core:add_cross_sells_to_cart' %}" id="crossSellForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div id="crossSellContainer" class="row g-3"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-success">Add Selected to Cart</button>
+          <button type="button" class="btn btn-primary" onclick="addAllAndCheckout()">Add All + Checkout</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- JS Section -->
+<script>
+  const CART_COUNT_API_URL = "{% url 'core:cart_count_api' %}";
+
+  function updateCartCount() {
+    fetch(CART_COUNT_API_URL)
+      .then(res => res.json())
+      .then(data => {
+        const badge = document.getElementById("cart-count");
+        if (badge) {
+          badge.textContent = data.count;
+          badge.style.display = data.count > 0 ? "inline-block" : "none";
+        }
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    updateCartCount();
+
+    document.querySelectorAll('.add-to-cart-form').forEach(form => {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const url = this.action;
+        const formData = new FormData(this);
+
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.cross_sell_html) {
+            document.getElementById('crossSellContainer').innerHTML = data.cross_sell_html;
+            new bootstrap.Modal(document.getElementById('crossSellModal')).show();
+            updateCartCount();
+          } else {
+            alert("Item added to cart!");
+            updateCartCount();
+          }
+        });
+      });
+    });
+  });
+
+  function addAllAndCheckout() {
+    document.querySelectorAll('#crossSellContainer input[type="checkbox"]').forEach(cb => cb.checked = true);
+    document.getElementById('crossSellForm').submit();
+  }
+</script>
+
+<!-- Styles -->
+<style>
+  .product-card {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    height: 100%;
+    text-align: center;
+    transition: box-shadow 0.3s;
+  }
+  .product-card:hover {
+    box-shadow: 0 0 11px rgba(0,0,0,0.2);
+  }
+  .product-img {
+    max-width: 100%;
+    height: 150px;
+    object-fit: contain;
+  }
+  .product-title {
+    font-size: 1rem;
+    font-weight: 600;
+    display: block;
+    margin: 5px 0;
+    color: #212529;
+    text-decoration: none;
+  }
+  .sidebar {
+    background: #f8f9fa;
+    padding: 15px;
+    height: 100%;
+  }
+  .sidebar a {
+    display: block;
+    margin-bottom: 10px;
+    text-decoration: none;
+    color: #0d6efd;
+  }
+  .flash-sale {
+    background-color: #e7f1ff;
+    border-left: 4px solid #0d6efd;
+    padding: 10px 15px;
+    border-radius: 5px;
+  }
+</style>
+{% endblock %}
